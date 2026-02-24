@@ -1,2 +1,3 @@
 solaredge_modbus
-pymodbus
+# Pin pymodbus to a 2.x version compatible with the current codebase
+pymodbus==2.5.3
