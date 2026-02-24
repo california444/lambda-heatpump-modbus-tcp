@@ -39,7 +39,9 @@ import argparse
 import logging
 import time
 from pymodbus.client import ModbusTcpClient
+from pymodbus.constants import Endian
 from pymodbus.exceptions import ModbusIOException
+from pymodbus.payload import BinaryPayloadDecoder
 import math
 
 # setup logging
@@ -67,16 +69,15 @@ class Fronius(Meter):
 
     def read(self):
         power = self.smartMeter.read_holding_registers(40087, 1, self.unit)
+        decodedPower = BinaryPayloadDecoder.fromRegisters(power.registers,byteorder=Endian.BIG, wordorder=Endian.BIG).decode_16bit_int()
 
-        _logger.debug("Power raw: {}".format(power.registers[0]))
-        p1 = twos_comp(power.registers[0], 16)
-        _logger.debug("Power twos_comp: {}".format(p1))
         factor = self.smartMeter.read_holding_registers(40091, 1, self.unit)
-        _logger.debug("Factor: {}".format(factor.registers[0]))
-        powerScaled = p1 * math.pow(10, twos_comp(factor.registers[0], 16))
-        powerScaledInv = powerScaled * -1
-        _logger.debug("Power Scaled: {}".format(powerScaledInv))
-        return int(powerScaledInv)
+        decodedScale = BinaryPayloadDecoder.fromRegisters(factor.registers,byteorder=Endian.BIG, wordorder=Endian.BIG).decode_16bit_int()
+
+        scaledPower = decodedPower * math.pow(10, decodedScale) * -1
+        _logger.debug("decodedPower: {}, decodedScale: {}, scaledPower: {}".format(decodedPower, decodedScale, scaledPower))
+
+        return int(scaledPower)
 
 
 class SolarEdge(Meter):
@@ -206,14 +207,6 @@ def loop(source, dest, interval, daemon):
                 time.sleep(interval)
                 source.reconnect()
                 dest.reconnect()
-
-
-def twos_comp(val, bits):
-    # compute the 2's complement of int value val
-    if (val & (1 << (bits - 1))) != 0:  # if sign bit is set e.g., 8bit: 128-255
-        val = val - (1 << bits)  # compute negative value
-    return val  # return positive value as is
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
