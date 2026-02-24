@@ -3,10 +3,6 @@
 
 Simple script to connect energy meter with a lambda heatpump over modbus tcp to prioritize execution at times of excess photovoltaic production:
 
-![heatpump-runtime](https://user-images.githubusercontent.com/7126422/190114167-42f43732-50fe-4749-8e3d-93b72817e8d0.png)
-
-(red: consumption, green: pv production, blue: self-consumption)
-
 Supports:
 
 - Solaredge energy meter (using [solaredge modbus](https://pypi.org/project/solaredge-modbus/))
@@ -36,4 +32,33 @@ Using the "static meter" you can simulate a given value. E.g. to write 1500W use
 
 ```
 python3 lambda-modbus-tcp.py --source-type static --dest-host 192.168.0.188 -d -i 5 --source-value 1500
+```
+
+## Docker Compose
+
+A simple `docker-compose.yml` example to run the container with environment variables (override values as needed):
+
+```yaml
+version: "3.9"
+
+services:
+	heatpump:
+		image: california444/lambda-heatpump-modbus-tcp:latest
+		container_name: lambda-heatpump-modbus-tcp
+		restart: unless-stopped
+		environment:
+			TZ: "Europe/Berlin"
+			SOURCE_TYPE: "fsm"
+			SOURCE_HOST: "192.168.0.25"
+			DEST_HOST: "192.168.0.106"
+			SOURCE_PORT: "502"
+			DEST_PORT: "502"
+			SOURCE_UNIT: "200"
+			INTERVAL: "9"
+			LOG_LEVEL: "debug"
+		logging:
+			driver: "json-file"
+			options:
+				max-size: "10m"
+				max-file: "1"
 ```
