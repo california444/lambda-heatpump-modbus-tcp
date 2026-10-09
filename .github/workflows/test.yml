@@ -16,8 +16,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.9 ist die Version des Docker-Images.
-        python-version: ['3.9', '3.11']
+        # 3.14 ist die Version des Docker-Images.
+        python-version: ['3.11', '3.14']
 
     steps:
       - name: Repo auschecken

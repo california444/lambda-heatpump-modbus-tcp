@@ -1,3 +1,4 @@
 solaredge_modbus
-# Pin pymodbus to a 3.x version known to work in this project
+# Pin pymodbus to a 3.x version known to work in this project. The script does
+# not start with 2.x or with current 3.x releases (changed imports and API).
 pymodbus==3.5.2

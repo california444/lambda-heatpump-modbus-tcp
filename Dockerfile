@@ -1,4 +1,4 @@
-FROM python:3.9-slim-bullseye
+FROM python:3.14-slim-trixie
 
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
@@ -16,7 +16,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY lambda-modbus-tcp.py ./
 
 # Create non-root user
-RUN addgroup --system app && adduser --system --ingroup app app || true
+RUN useradd --system --user-group --no-create-home app
 
 # Allow runtime configuration via environment variables (overridden by docker run -e or compose `environment:`)
 # These ENV assignments use build-time expansion if provided, but will be overridden at container runtime by environment variables.
