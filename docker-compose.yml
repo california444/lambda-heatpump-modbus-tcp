@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  heatpump:
+    image: ghcr.io/california444/lambda-heatpump-modbus-tcp:latest
+    container_name: lambda-heatpump-modbus-tcp
+    restart: unless-stopped
+    environment:
+      TZ: "Europe/Berlin"
+      SOURCE_TYPE: "fsm"
+      SOURCE_HOST: "192.168.0.25"
+      DEST_HOST: "192.168.0.106"
+      SOURCE_PORT: "502"
+      DEST_PORT: "502"
+      SOURCE_UNIT: "200"
+      INTERVAL: "9"
+      LOG_LEVEL: "debug"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "1"

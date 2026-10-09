@@ -35,16 +35,28 @@ Using the "static meter" you can simulate a given value. E.g. to write 1500W use
 python3 lambda-modbus-tcp.py --source-type static --dest-host 192.168.0.188 -d -i 5 --source-value 1500
 ```
 
+Tests:
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
 ## Docker Compose
 
-A simple `docker-compose.yml` example to run the container with environment variables (override values as needed):
+The image is built and published to the GitHub Container Registry on every push to `main` and once a week (to pick up base image updates), for `linux/arm64` (Raspberry Pi):
+
+- `ghcr.io/california444/lambda-heatpump-modbus-tcp:latest`: current state of `main`
+- `ghcr.io/california444/lambda-heatpump-modbus-tcp:sha-<commit>`: fixed build of a single commit, e.g. for a rollback
+- `ghcr.io/california444/lambda-heatpump-modbus-tcp:<YYYYMMDD>`: build of a given day
+
+The [docker-compose.yml](docker-compose.yml) in this repository is an example to run the container with environment variables (override values as needed):
 
 ```yaml
 version: "3.9"
 
 services:
  heatpump:
-  image: california444/lambda-heatpump-modbus-tcp:latest
+  image: ghcr.io/california444/lambda-heatpump-modbus-tcp:latest
   container_name: lambda-heatpump-modbus-tcp
   restart: unless-stopped
   environment:

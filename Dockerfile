@@ -3,20 +3,17 @@ FROM python:3.9-slim-bullseye
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
-# Install git for checking out the repository
-RUN apt-get update \
-	&& apt-get install -y --no-install-recommends git ca-certificates \
-	&& rm -rf /var/lib/apt/lists/*
+# Erst nur die Abhaengigkeiten kopieren und installieren: solange sich
+# requirements.txt nicht aendert, trifft dieser Layer den Build-Cache,
+# auch wenn am Quellcode geschraubt wurde.
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Allow overriding the repo URL and branch at build-time
-ARG REPO_URL=https://github.com/california444/lambda-heatpump-modbus-tcp.git
-ARG REPO_BRANCH=main
-
-# Clone the repository into the image
-RUN git clone --depth 1 --branch ${REPO_BRANCH} ${REPO_URL} /app
-
-# Install Python dependencies from the checked-out repo
-RUN pip install --no-cache-dir -r /app/requirements.txt
+# Quellcode aus dem Build-Kontext statt per "git clone" zur Build-Zeit.
+# Der Clone war ueber seine Kommandozeile cachebar und konnte deshalb
+# stillschweigend einen alten Stand liefern; so entspricht das Image
+# genau dem Commit, aus dem es gebaut wurde.
+COPY lambda-modbus-tcp.py ./
 
 # Create non-root user
 RUN addgroup --system app && adduser --system --ingroup app app || true
@@ -31,6 +28,11 @@ ENV SOURCE_TYPE=${SOURCE_TYPE} \
 		SOURCE_UNIT=${SOURCE_UNIT} \
 		INTERVAL=${INTERVAL} \
 		LOG_LEVEL=${LOG_LEVEL}
+
+# Herkunft des Builds bewusst am Ende: APP_REVISION aendert sich mit jedem
+# Commit und wuerde weiter oben den pip-Layer jedes Mal invalidieren.
+ARG APP_REVISION=""
+ENV APP_REVISION=${APP_REVISION}
 
 USER app
 

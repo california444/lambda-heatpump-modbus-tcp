@@ -1,0 +1,39 @@
+name: Tests
+
+on:
+  pull_request:
+  # Pushes auf main laufen ueber release.yml, das diesen Workflow aufruft.
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.9 ist die Version des Docker-Images.
+        python-version: ['3.9', '3.11']
+
+    steps:
+      - name: Repo auschecken
+        uses: actions/checkout@v7
+
+      - name: Python einrichten
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Abhängigkeiten installieren
+        run: pip install -r requirements.txt
+
+      - name: Syntax des Skripts prüfen
+        run: python -m py_compile lambda-modbus-tcp.py
+
+      - name: Tests ausführen
+        run: python -m unittest discover -s tests -v
