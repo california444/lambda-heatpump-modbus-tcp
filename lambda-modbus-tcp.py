@@ -40,7 +40,6 @@ import logging
 import time
 from pymodbus.client import ModbusTcpClient
 from pymodbus.constants import Endian
-from pymodbus.exceptions import ModbusIOException
 from pymodbus.payload import BinaryPayloadDecoder
 import math
 
@@ -48,6 +47,16 @@ import math
 FORMAT = "%(asctime)-15s %(levelname)-8s %(module)-15s:%(lineno)-8s %(message)s"
 logging.basicConfig(format=FORMAT)
 _logger = logging.getLogger()
+
+
+def read_registers(response, count, what):
+    """Return the registers of a modbus response, raise if the response is an error or incomplete"""
+    if response.isError():
+        raise RuntimeError("Failed to read {}: {}".format(what, response))
+    registers = getattr(response, "registers", None)
+    if registers is None or len(registers) < count:
+        raise RuntimeError("Incomplete response reading {}: {}".format(what, response))
+    return registers
 
 
 # Meter implementations
@@ -65,14 +74,15 @@ class Fronius(Meter):
         self.reconnect()
 
     def reconnect(self):
+        self.smartMeter.close()
         self.smartMeter.connect()
 
     def read(self):
-        power = self.smartMeter.read_holding_registers(40087, 1, self.unit)
-        decodedPower = BinaryPayloadDecoder.fromRegisters(power.registers,byteorder=Endian.BIG, wordorder=Endian.BIG).decode_16bit_int()
+        power = read_registers(self.smartMeter.read_holding_registers(40087, 1, self.unit), 1, "smart meter power")
+        decodedPower = BinaryPayloadDecoder.fromRegisters(power,byteorder=Endian.BIG, wordorder=Endian.BIG).decode_16bit_int()
 
-        factor = self.smartMeter.read_holding_registers(40091, 1, self.unit)
-        decodedScale = BinaryPayloadDecoder.fromRegisters(factor.registers,byteorder=Endian.BIG, wordorder=Endian.BIG).decode_16bit_int()
+        factor = read_registers(self.smartMeter.read_holding_registers(40091, 1, self.unit), 1, "smart meter scale factor")
+        decodedScale = BinaryPayloadDecoder.fromRegisters(factor,byteorder=Endian.BIG, wordorder=Endian.BIG).decode_16bit_int()
 
         scaledPower = decodedPower * math.pow(10, decodedScale) * -1
         _logger.debug("decodedPower: {}, decodedScale: {}, scaledPower: {}".format(decodedPower, decodedScale, scaledPower))
@@ -165,23 +175,23 @@ class Lambda(HeatPump):
         valueTransformed = self.transform(value)
         _logger.debug("val after transform {}".format(valueTransformed))
         r = self.heat_pump.write_registers(102, valueTransformed)
-        if r is ModbusIOException:
-            raise RuntimeError("Failed to write value")
         if r.isError():
-            raise RuntimeError("Error writing value")
+            raise RuntimeError("Error writing value: {}".format(r))
         _logger.debug("Wrote value {} (hex: {}) to lambda heat pump".format(value, hex(valueTransformed)))
 
     def check(self):
         r = self.heat_pump.read_holding_registers(1)
-        if r is ModbusIOException:
+        if r.isError():
             self.reconnect()
             r = self.heat_pump.read_holding_registers(1)
-        if r.registers[0] == 0:
+        state = read_registers(r, 1, "heat pump state")[0]
+        if state == 0:
             raise RuntimeError("Lambda heatpump is turned off")
-        if r.registers[0] == 3:
+        if state == 3:
             raise RuntimeError("Lambda heatpump reports error")
 
     def reconnect(self):
+        self.heat_pump.close()
         self.heat_pump.connect()
 
 
@@ -203,10 +213,16 @@ def loop(source, dest, interval, daemon):
             if not daemon:
                 raise e
             else:
-                _logger.error("Failed to read/write energy value, automatically retrying", exc_info=e)
+                # full traceback only on debug level, these errors are expected while a device is unreachable
+                _logger.error("Failed to read/write energy value, automatically retrying: {}".format(e),
+                              exc_info=e if _logger.isEnabledFor(logging.DEBUG) else None)
                 time.sleep(interval)
-                source.reconnect()
-                dest.reconnect()
+                try:
+                    source.reconnect()
+                    if dest:
+                        dest.reconnect()
+                except Exception as reconnect_error:
+                    _logger.error("Failed to reconnect, automatically retrying: {}".format(reconnect_error))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
