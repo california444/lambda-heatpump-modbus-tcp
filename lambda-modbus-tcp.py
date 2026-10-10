@@ -42,9 +42,11 @@ DEST_PORT, DEST_TYPE, INTERVAL, LOG_LEVEL), command line arguments take preceden
 import argparse
 import logging
 import os
+import platform
 import signal
 import sys
 import time
+import pymodbus
 from pymodbus.client import ModbusTcpClient
 from pymodbus.constants import Endian
 from pymodbus.payload import BinaryPayloadDecoder
@@ -344,6 +346,11 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
 
     _logger.setLevel(args.log.upper())
+
+    # set by the docker build (see Dockerfile), empty when started locally
+    if os.getenv("APP_REVISION"):
+        _logger.info("Revision {} (base image {})".format(os.getenv("APP_REVISION"), os.getenv("APP_BASE_IMAGE") or "?"))
+    _logger.info("Python {}, pymodbus {}".format(platform.python_version(), pymodbus.__version__))
 
     source = create_meter(args.source_type, args.source_host, args.source_port, args.source_unit, args.source_value)
     dest = create_dest("lambda", args.dest_host, args.dest_port, args.dest_type)

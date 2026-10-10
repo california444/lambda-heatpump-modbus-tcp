@@ -1,4 +1,7 @@
-FROM python:3.14-slim-trixie
+# Basis-Image als ARG, damit es nur an einer Stelle steht und das Skript
+# es beim Start ausgeben kann.
+ARG BASE_IMAGE=python:3.14-slim-trixie
+FROM ${BASE_IMAGE}
 
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
@@ -20,8 +23,12 @@ RUN useradd --system --user-group --no-create-home app
 
 # Herkunft des Builds bewusst am Ende: APP_REVISION aendert sich mit jedem
 # Commit und wuerde weiter oben den pip-Layer jedes Mal invalidieren.
+# ARGs von vor dem FROM sind hier nicht mehr sichtbar und muessen erneut
+# deklariert werden.
+ARG BASE_IMAGE
 ARG APP_REVISION=""
-ENV APP_REVISION=${APP_REVISION}
+ENV APP_BASE_IMAGE=${BASE_IMAGE} \
+    APP_REVISION=${APP_REVISION}
 
 USER app
 
