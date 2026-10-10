@@ -237,5 +237,78 @@ class LambdaTest(ModbusTestCase):
         return self.written(value, value_transform)
 
 
+class ParseArgsTest(unittest.TestCase):
+    ENV = {
+        "SOURCE_TYPE": "fsm",
+        "SOURCE_HOST": "192.168.0.25",
+        "SOURCE_PORT": "1502",
+        "SOURCE_UNIT": "200",
+        "SOURCE_VALUE": "1500",
+        "DEST_HOST": "192.168.0.106",
+        "DEST_PORT": "503",
+        "DEST_TYPE": "positive",
+        "INTERVAL": "9",
+        "LOG_LEVEL": "debug",
+    }
+
+    def parse(self, argv, environ):
+        with mock.patch.dict(os.environ, environ, clear=True):
+            return lmt.parse_args(argv)
+
+    def assert_exits(self, argv, environ):
+        # argparse reports errors on stderr and exits
+        with mock.patch("sys.stderr"), self.assertRaises(SystemExit):
+            self.parse(argv, environ)
+
+    def test_defaults(self):
+        args = self.parse(["--dest-host", "192.168.0.106"], {})
+        self.assertEqual(
+            vars(args),
+            {
+                "source_type": "se", "source_host": None, "source_port": 502, "source_unit": 1,
+                "source_value": 2000, "dest_host": "192.168.0.106", "dest_port": 502, "dest_type": "negative",
+                "daemon": False, "interval": 1.0, "log": "info",
+            }
+        )
+
+    def test_all_options_from_environment(self):
+        args = self.parse(["-d"], self.ENV)
+        self.assertEqual(
+            vars(args),
+            {
+                "source_type": "fsm", "source_host": "192.168.0.25", "source_port": 1502, "source_unit": 200,
+                "source_value": 1500, "dest_host": "192.168.0.106", "dest_port": 503, "dest_type": "positive",
+                "daemon": True, "interval": 9.0, "log": "debug",
+            }
+        )
+
+    def test_command_line_takes_precedence_over_environment(self):
+        args = self.parse(["--source-port", "502", "--dest-host", "192.168.0.188", "-i", "15"], self.ENV)
+        self.assertEqual(args.source_port, 502)
+        self.assertEqual(args.dest_host, "192.168.0.188")
+        self.assertEqual(args.interval, 15.0)
+
+    def test_empty_environment_variable_uses_default(self):
+        args = self.parse([], {"DEST_HOST": "192.168.0.106", "SOURCE_PORT": "", "INTERVAL": ""})
+        self.assertEqual(args.source_port, 502)
+        self.assertEqual(args.interval, 1.0)
+
+    def test_log_level_from_environment_ignores_case(self):
+        args = self.parse([], {"DEST_HOST": "192.168.0.106", "LOG_LEVEL": "DEBUG"})
+        self.assertEqual(args.log, "debug")
+
+    def test_dest_host_is_required(self):
+        self.assert_exits([], {})
+        self.assert_exits([], {"DEST_HOST": ""})
+
+    def test_invalid_number_in_environment_is_rejected(self):
+        self.assert_exits([], {"DEST_HOST": "192.168.0.106", "SOURCE_PORT": "abc"})
+
+    def test_invalid_choice_in_environment_is_rejected(self):
+        self.assert_exits([], {"DEST_HOST": "192.168.0.106", "SOURCE_TYPE": "unknown"})
+        self.assert_exits([], {"DEST_HOST": "192.168.0.106", "DEST_TYPE": "unknown"})
+        self.assert_exits([], {"DEST_HOST": "192.168.0.106", "LOG_LEVEL": "unknown"})
+
+
 if __name__ == "__main__":
     unittest.main()

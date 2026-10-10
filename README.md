@@ -49,6 +49,23 @@ The image is built and published to the GitHub Container Registry on every push 
 - `ghcr.io/california444/lambda-heatpump-modbus-tcp:sha-<commit>`: fixed build of a single commit, e.g. for a rollback
 - `ghcr.io/california444/lambda-heatpump-modbus-tcp:<YYYYMMDD>`: build of a given day
 
+The container is configured with environment variables. Only `DEST_HOST` is required (and `SOURCE_HOST` unless `SOURCE_TYPE` is `static`), all others fall back to their default. The same variables also work without Docker, command line arguments take precedence.
+
+| Variable | Argument | Default | Description |
+| --- | --- | --- | --- |
+| `SOURCE_TYPE` | `--source-type` | `se` | `se`: Solaredge, `fsm`: Fronius Smart Meter, `static`: simulate a static value |
+| `SOURCE_HOST` | `--source-host` | | energy meter host address |
+| `SOURCE_PORT` | `--source-port` | `502` | energy meter port |
+| `SOURCE_UNIT` | `--source-unit` | `1` | energy meter modbus unit |
+| `SOURCE_VALUE` | `--source-value` | `2000` | value in W for the static meter |
+| `DEST_HOST` | `--dest-host` | | heat pump host address |
+| `DEST_PORT` | `--dest-port` | `502` | heat pump port |
+| `DEST_TYPE` | `--dest-type` | `negative` | `negative`: send excess as negative value, `positive`: send excess as is |
+| `INTERVAL` | `--interval` | `1` | interval in seconds for reading/writing |
+| `LOG_LEVEL` | `--log` | `info` | `critical`, `error`, `warning`, `info` or `debug` |
+
+The container runs in daemon mode (`-d`), which keeps running after errors.
+
 The [docker-compose.yml](docker-compose.yml) in this repository is an example to run the container with environment variables (override values as needed):
 
 ```yaml

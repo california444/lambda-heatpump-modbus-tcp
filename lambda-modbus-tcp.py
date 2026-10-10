@@ -33,10 +33,17 @@ optional arguments:
   --log {critical,error,warning,info,debug}
                         "critical", "error", "warning", "info" or "debug"
 
+All options except --daemon can also be set with environment variables
+(SOURCE_TYPE, SOURCE_HOST, SOURCE_PORT, SOURCE_UNIT, SOURCE_VALUE, DEST_HOST,
+DEST_PORT, DEST_TYPE, INTERVAL, LOG_LEVEL), command line arguments take precedence.
+
 """
 
 import argparse
 import logging
+import os
+import signal
+import sys
 import time
 from pymodbus.client import ModbusTcpClient
 from pymodbus.constants import Endian
@@ -224,67 +231,76 @@ def loop(source, dest, interval, daemon):
                 except Exception as reconnect_error:
                     _logger.error("Failed to reconnect, automatically retrying: {}".format(reconnect_error))
 
-if __name__ == "__main__":
+def env(name, default=None):
+    """Return the environment variable or the default if it is unset or empty"""
+    return os.environ.get(name) or default
+
+
+def parse_args(argv=None):
+    # every option can also be given as environment variable, command line arguments take precedence
     parser = argparse.ArgumentParser(
-        description="Connect energy manager and lambda heatpump"
+        description="Connect energy manager and lambda heatpump",
+        epilog="All options except --daemon can also be set with environment variables, see README"
     )
-    parser.add_argument(
+    checked = []
+    checked.append(parser.add_argument(
         "--source-type",
         choices=["se", "fsm", "static"],
-        help='"se": Solaredge, "fsm": ForniusSmartMeter, "static": Simulate a static value',
+        help='"se": Solaredge, "fsm": ForniusSmartMeter, "static": Simulate a static value (env: SOURCE_TYPE)',
         type=str,
-        default="se"
-    )
+        default=env("SOURCE_TYPE", "se")
+    ))
 
     parser.add_argument(
         "--source-host",
-        help='source host address',
+        help='source host address (env: SOURCE_HOST)',
         type=str,
-        required=False
+        default=env("SOURCE_HOST")
     )
 
     parser.add_argument(
         "--source-port",
-        help='source port',
+        help='source port (env: SOURCE_PORT)',
         type=int,
-        default=502
+        default=env("SOURCE_PORT", 502)
     )
 
     parser.add_argument(
         "--source-unit",
-        help='source unit',
+        help='source unit (env: SOURCE_UNIT)',
         type=int,
-        default=1
+        default=env("SOURCE_UNIT", 1)
     )
 
     parser.add_argument(
         "--source-value",
-        help='source value',
+        help='source value (env: SOURCE_VALUE)',
         type=int,
-        default=2000
+        default=env("SOURCE_VALUE", 2000)
     )
 
     parser.add_argument(
         "--dest-host",
-        help='heat pump host address',
+        help='heat pump host address (env: DEST_HOST)',
         type=str,
-        required=True
+        default=env("DEST_HOST"),
+        required=env("DEST_HOST") is None
     )
 
     parser.add_argument(
         "--dest-port",
-        help="heat pump port to use",
+        help="heat pump port to use (env: DEST_PORT)",
         type=int,
-        default=502
+        default=env("DEST_PORT", 502)
     )
 
-    parser.add_argument(
+    checked.append(parser.add_argument(
         "--dest-type",
         choices=["negative", "positive"],
-        help='"negative": send excess as negative value, "positive": send excess as is',
+        help='"negative": send excess as negative value, "positive": send excess as is (env: DEST_TYPE)',
         type=str,
-        default="negative"
-    )
+        default=env("DEST_TYPE", "negative")
+    ))
 
     parser.add_argument(
         "-d",
@@ -296,21 +312,38 @@ if __name__ == "__main__":
     parser.add_argument(
         "-i",
         "--interval",
-        help='interval in seconds for reading/writing',
+        help='interval in seconds for reading/writing (env: INTERVAL)',
         type=float,
-        default=1.0
+        default=env("INTERVAL", 1.0)
     )
 
-    parser.add_argument(
+    checked.append(parser.add_argument(
         "--log",
         choices=["critical", "error", "warning", "info", "debug"],
-        help='"critical", "error", "warning", "info" or "debug"',
+        help='"critical", "error", "warning", "info" or "debug" (env: LOG_LEVEL)',
         type=str,
-    )
+        default=env("LOG_LEVEL", "info").lower()
+    ))
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
-    _logger.setLevel(args.log.upper() if args.log else logging.INFO)
+    # argparse does not check defaults against the choices, so values from the environment are checked here
+    for action in checked:
+        value = getattr(args, action.dest)
+        if value not in action.choices:
+            parser.error("argument {}: invalid choice: {!r} (choose from {})".format(
+                action.option_strings[-1], value, ", ".join(map(repr, action.choices))))
+
+    return args
+
+
+if __name__ == "__main__":
+    args = parse_args()
+
+    # without a handler SIGTERM is ignored when running as PID 1 in a container, "docker stop" would wait for its timeout
+    signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
+
+    _logger.setLevel(args.log.upper())
 
     source = create_meter(args.source_type, args.source_host, args.source_port, args.source_unit, args.source_value)
     dest = create_dest("lambda", args.dest_host, args.dest_port, args.dest_type)
